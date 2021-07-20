@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Подтипирование в Julia: рациональная реконструкция</title>
+    <meta charset="utf-8">
+    <!--script type="text/javascript" async
+        src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+    </script>
+    <script type="text/x-mathjax-config">
+        MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}});
+    </script-->
+    <style>
+      /**/
+      @import url(https://fonts.googleapis.com/css?family=PT+Sans);
+      /*@import url(https://fonts.googleapis.com/css?family=Merriweather+Regular);*/
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+      
+      @media print {
+        .has-continuation {
+          display: none;
+        }
+      }
+      body { 
+        font-family: 'PT Serif'; 
+      }
+      h1, h2, h3 {
+        font-family: 'PT Sans';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { 
+        font-family: 'Ubuntu Mono';
+        font-size: 26px;
+      }
+      .remark-slide-content h1 { font-size: 46pt; }
+//      .remark-slide-content h2 { font-size: 2em;   }
+      .remark-slide-content h3 { font-size: 30pt; }
+      .remark-slide-content      { font-size: 24px;  }
+      .footnote {
+        position: absolute;
+        bottom: 3em;
+      }
+      li p { line-height: 1.25em; }
+      .red { color: #fa0000; }
+      .large { font-size: 30px; }
+      .small { font-size: 22px; }
+      a, a > code {
+        color: rgb(249, 38, 114);
+        text-decoration: none;
+      }
+      code {
+        background: #e7e8e2;
+        border-radius: 5px;
+      }
+      .remark-code-line-highlighted     { background-color: #373832; }
+      .pull-left {
+        float: left;
+        width: 47%;
+      }
+      .pull-right {
+        float: right;
+        width: 47%;
+      }
+      .pull-right ~ p {
+        clear: both;
+      }
+      #slideshow .slide .content code {
+        font-size: 1em;
+      }
+      #slideshow .slide .content pre code {
+        font-size: 1em;
+        padding: 15px;
+      }
+      .inverse {
+        background: #272822;
+        color: #777872;
+        text-shadow: 0 0 20px #333;
+      }
+      .inverse h1, .inverse h2 {
+        color: #f3f3f3;
+        line-height: 0.8em;
+      }
+
+      /* Slide-specific styling */
+      #slide-inverse .footnote {
+        bottom: 12px;
+        left: 20px;
+      }
+      #slide-how .slides {
+        font-size: 0.9em;
+        position: absolute;
+        top:  151px;
+        right: 140px;
+      }
+      #slide-how .slides h3 {
+        margin-top: 0.2em;
+      }
+      #slide-how .slides .first, #slide-how .slides .second {
+        padding: 1px 20px;
+        height: 90px;
+        width: 120px;
+        -moz-box-shadow: 0 0 10px #777;
+        -webkit-box-shadow: 0 0 10px #777;
+        box-shadow: 0 0 10px #777;
+      }
+      #slide-how .slides .first {
+        background: #fff;
+        position: absolute;
+        top: 20%;
+        left: 20%;
+        z-index: 1;
+      }
+      #slide-how .slides .second {
+        position: relative;
+        background: #fff;
+        z-index: 0;
+      }
+
+      /* Two-column layout */
+      .left-column {
+        color: #777;
+        width: 60%;
+        height: 92%;
+        float: left;
+      }
+        .left-column h2:last-of-type, .left-column h3:last-child {
+          color: #000;
+        }
+      .right-column {
+        width: 40%;
+        float: right;
+        padding-top: 1em;
+      }
+      .left-half {
+        width: 45%;
+        float: left;
+      }
+      .right-half {
+        width: 45%;
+        float: right;
+      }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle
+
+# Подтипирование в Julia: рациональная реконструкция¹
+
+### _Семинар «Языки программирования и компиляторы» Мехмат ЮФУ, 3&nbsp;августа 2018_
+
+А.М. Пеленицын, Northeastern U. (Boston)  
+a.pelenitsyn@gmail.com, [mmcs.sfedu.ru/~ulysses](http://staff.mmcs.sfedu.ru/~ulysses/)
+
+<p style="text-align:left">
+<small>
+<span style="font-family: Ubuntu Mono;">———————</span><br>
+¹Основано на <a href="https://www.di.ens.fr/~zappa/projects/lambdajulia/">совместной работе</a> с
+F. Zappa Nardelli, J. Belyakova, J. Bezanson, B. Chung, J. Vitek. 
+</small>
+</p>
+---
+
+# Краткий курс Julia
+
+
+
+* Разработка: прикладные математики в MIT, 2012
+
+
+
+* «[динамический](https://en.wikipedia.org/wiki/Dynamic_programming_language)», JIT-компилируемый (в LLVM)
+
+
+
+* условно ОО, нет статической проверки типов, но типов **много**
+
+
+
+* Множественная диспетчеризация («мультиметоды»):
+
+    ```julia
+*(x::Number, r::Range)  = range(x*first(r),...)
+*(x::Number, y::Number) = *(promote(x,y)...)
+*(x::T, y::T)
+        where T <: Union{Signed,Unsigned} =
+        mul_int(x,y)
+    
+    print( 3 * 4 )
+    ```
+
+
+
+* ММ опираются на (удивительно сложное) отношение подтипирования
+
+---
+
+# Подтипирование в Julia
+
+* Никогда не было описано формально
+
+* Реализовано в 2 KLOCs (хитроумного) C-кода,  
+    который понимает ~1 разработчик (Jeff Bezanson)
+
+* Постоянный источник баг-репортов
+
+---
+
+# Краткий курс типов в Julia (I)
+
+* Пользовательские типы: абстрактные и конкретные
+
+    ```julia
+    abstract  type   Integer <: Real                 end
+
+    primitive type   Bool    <: Integer 8            end
+
+    mutable   struct Point   <: Any  x::Real y::Bool end
+    ```
+
+
+
+* Пользовательские параметрические типы:
+
+    ```julia
+    struct Rational{T<:Integer} <: Real
+      num :: T
+      den :: T
+    end
+    ```
+
+---
+
+# Краткий курс типов в Julia (II)
+
+
+
+* Типы-объединения: `Union{Int, Bool}` ∋ `1, 42, true`
+
+
+
+* Кортежи: `Tuple{Int, Bool, String}` ∋ `(1, true, "MMCS")`
+
+
+
+* Экзистенциалы (`where`-типы): `Vector{T} where T <: Number` ∋ `[1.0, 2.0], [1, 2]`
+
+
+
+* (Почти) Полная грамматика:
+
+    ```
+τ   ::= Any 
+        |   Union{ τ1 , … , τn } 
+        |   Tuple{ τ1 , … , τn } 
+        |   name { τ1 , … , τn } 
+        |   τ where τ1 <: T <: τ2
+    ```
+---
+
+class:center, middle
+
+# Игра: Угадай subtyping!
+
+<img height="200px" src="jigsaw.jpg" />
+
+---
+
+1. Кортежи
+    ```julia
+    julia> Tuple{Int, String} <: Tuple{Number, String}
+    ```
+
+    ```julia
+    true
+    ```
+
+2. Объединения
+    ```julia
+    julia> String <: Union{Int, String}
+    ```
+
+    ```julia
+    true
+    ```
+
+3. Взаимодействие между ними
+    ```julia
+    julia> Tuple{Union{A, B}, C} <: Union{Tuple{A, C}, Tuple{B, C}}
+    ```
+
+    ```julia
+    true
+    ```
+
+---
+
+1. Параметрические типы
+    ```julia
+    julia> Vector{Int} <: Vector{Number}
+    ```
+
+    ```julia
+    false
+    ```
+
+2. Экзистенциалы
+
+    ```julia
+    julia> Vector{Int} <: Vector{T} where T
+    ```
+
+    ```julia
+    true
+    ```
+
+3. Взаимодействие между ними
+
+    ```julia
+    julia> Vector{Vector{T}} where T <: Vector{Vector{T} where T} 
+    ```
+
+    ```julia
+    false
+    ```
+---
+
+# Выводы
+
+1. Параметрические типы _инвариантны_, а кортежи _ковариантны_
+
+2. Кортежи _дистрибутивны_ относительно объединений
+
+3. Экзистенциалы могут _сокращать_ область действия на компоненту кортежа, если другие компоненты не зависят от экзистенциальной переменной
+
+4. Объединения (и экзистенциалы) следуют _∀- или ∃-семантике_ в зависимости от (левой или правой, соответственно) позиции в `<:`
+
+---
+
+class:center, middle
+
+<img height="630px" src="subt-f.png" />
+
+---
+
+## Форма утверждения (judgement)
+
+
+
+* Поскольку есть переменные, нужны «окружения»:
+    ```julia
+E, T (L, τ1, τ2)   ⊢   τ  <:  τ'
+—————————————————————————————————————————
+E   ⊢   (τ where τ1 <: T <: τ2)  <:  τ'
+    ```
+    Окружение хранит информацию о переменных: имя, тег L/R (∀/∃), границы, …
+
+
+
+* У ∃-переменных (тег R) границы могут меняться, поэтому окружение обновляется:
+    ```julia
+    E   ⊢   τ <: τ'   ⊢   E'
+    ```
+    Пример:
+    
+    ```julia
+    Tuple{Ref{Int}, Ref{Bool}}  <:̸  Tuple{Ref{T} , Ref{T}} where T
+    ```
+
+---
+
+# Барьеры
+
+Мы знаем, что
+
+```julia
+Vector{Vector{T}} where T <:̸ Vector{Vector{S} where S}
+```
+но как это получить?
+
+
+
+Решение: вставлять в окружение `E` _барьеры_ при переходе сквозь инвариантные конструкторы.
+
+---
+
+# Иногда они возвращаются
+
+_Хранение переменных, вышедших из области видимости_
+
+```julia
+Tuple{Ref{S} where S <:Int} <: Tuple{Ref{T}} where T
+```
+
+---
+
+# Противоречивые границы
+
+```julia
+Tuple{Bool , Ref{Int}} <:̸  Tuple{S, Ref{T}} where S <: T where T
+```
+
+Приводит к ограничениям:
+
+
+
+* `S <: T`
+
+* `Bool <: S`
+
+* `Int <: T <: Int`
+
+
+
+⇒ при выходе ∃-переменной из области видимости, следует проверять множество ограничений на совместность.
+
+---
+
+# Нормализация и денормализация
+
+Без дополнительных преобразований невозможно (непонятно как) доказать
+
+* [кейс для нормализации:]
+    ```julia
+    Tuple{ Union{τ1, τ2}, τ } <: Union{ Tuple{τ1, τ}, Tuple{τ2, τ} }
+    ```
+
+
+* [кейс для денормализации:]
+
+    ```julia
+Ref{Union{Tuple{Int}, Tuple{Bool}}} <: Ref{Tuple{T}} where T
+    ```
+---
+
+# Диагональное правило
+
+> _**Если** переменная имеет ≥2 ковариантных вхождений и ни одного инвариантного,  
+> **то** она может быть инстанцирована только конкретным типом_
+
+
+
+Пример: `f(T, T) where T` **не** может быть вызвана так: `f(1, true)`
+
+
+
+### Необходимость динамической проверки диагональности
+
+```julia
+Tuple{Bool,   Any} <: Tuple{Union{Bool, T}, T} where T
+Tuple{String, Any} <:̸ Tuple{Union{Bool, T}, T} where T
+```
+
+
+
+⇒ **Выход:** окружение хранит счётчики ко-/инвариантных вхождений переменных
+
+---
+
+**Кортежи, объединения, параметрические типы**
+
+<img height="550px" src="subt-1.png" />
+
+---
+
+**Экзистенциалы**
+
+<img height="550px" src="subt-2.png" />
+
+---
+
+# Проблема: формализм тяжёлый, как обосновать корректность?
+
+* Регрессионные тесты для подтипирования в дистрибутиве Julia
+
+* Фаззинг
+
+* ** Логирование реального кода **
+
+---
+
+# Лог-валидация
+
+* Инструментирование Julia VM для логирования проверок подтипирования
+
+* Запуск тестов ~100 «популярных» пакетов
+
+* ⇒ ~ 2 Гб проверок подтипирования (текстовые файлы)
+
+
+
+Найдено много ошибок у нас и несколько ошибок в Julia
+
+---
+
+# Чем мы всё ещё не довольны
+
+* Динамическая (Де)Нормализация
+
+* Динамическое определение «диагональных переменных»
+
+* Барьеры
+
+
+
+* ⇐ Слишком «алгоритмическая» формулировка
+
+
+
+* Отсутствие типов-пересечений и сломанный R_Left ([исправлен в dev-версии](https://github.com/JuliaLang/julia/pull/26737/))
+
+    ```julia
+     julia>  Vector{Vector{Number}}  <:
+             Vector{Union{Vector{Number}, Vector{S}}} where Int<:S<:Signed
+     true
+    ```
+
+
+
+* Отсутствие семантической модели
+
+
+
+**Что вообще можно доказать об этой системе?**
+
+---
+
+# Пространство для дизайна ЯП
+
+* [Инвариантные кортежи](https://github.com/JuliaLang/julia/issues/24614) и синтаксическая диагональность:
+
+    > [Stefan Karpinsky:]_Yes, unfortunately I don't think a gentle transition is really possible. The invariant tuple approach seems to lead to some fundamental difference, which is actually precisely what's potentially appealing about it – that it might lead to different and possibly better semantics._
+
+* Пользовательская вариантность без дистрибутивности (аля C# / Scala)
+
+* Перегрузка/мультиметоды для DOT (формализм для Scala, path-dependent types)
+
+    </textarea>
+    <script src="remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create({
+        //sourceUrl: 'slides.md',
+        ratio: '16:9',
+        countIncrementalSlides: false
+      });
+      function hidePrintSlides(slideshow) {
+          const allSlides = slideshow.getSlides();
+          let lastSlide;
+          let currentSlide;
+          const slidesToHide = [];
+          const slidesEl = document.getElementsByClassName("remark-slides-area")[0];
+          const slideEls = slidesEl.children;
+          for (let i = 0; i < allSlides.length; i++) {
+            lastSlide = currentSlide;
+            currentSlide = allSlides[i];
+            if (lastSlide && (
+              String(lastSlide.properties.continued) === "true"
+              ||
+              String(currentSlide.properties.count) === "false"
+            )) {
+              const slideToHideIndex = i - 1;
+              slidesToHide.push(slideToHideIndex);
+              slideEls[slideToHideIndex].className = slideEls[slideToHideIndex].className + ' has-continuation';
+            }
+          }
+        }
+        hidePrintSlides(slideshow)
+    </script>
+  </body>
+</html>

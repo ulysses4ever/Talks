@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Julia Subtyping Lessons Scala Could Learn (Student Talk)</title>
+    <meta charset="utf-8">
+    <!--script type="text/javascript" async
+        src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+    </script>
+    <script type="text/x-mathjax-config">
+        MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}});
+    </script-->
+    <style>
+      /**/
+      @import url(https://fonts.googleapis.com/css?family=PT+Sans);
+      /*@import url(https://fonts.googleapis.com/css?family=Merriweather+Regular);*/
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+      
+      @media print {
+        .has-continuation {
+          display: none;
+        }
+      }
+      body { 
+        font-family: 'PT Serif'; 
+      }
+      h1, h2, h3 {
+        font-family: 'PT Sans';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { 
+        font-family: 'Ubuntu Mono';
+        font-size: 26px;
+      }
+      .remark-slide-content h1 { font-size: 42pt; }
+//      .remark-slide-content h2 { font-size: 2em;   }
+      .remark-slide-content h3 { font-size: 30pt; }
+      .remark-slide-content      { font-size: 26px;  }
+      .footnote {
+        position: absolute;
+        bottom: 3em;
+      }
+      li p { line-height: 1.25em; }
+      .red { color: #fa0000; }
+      .green { color: #00aa00; }
+      .large { font-size: 30px; }
+      .small { font-size: 22px; }
+      a, a > code {
+        color: rgb(249, 38, 114);
+        text-decoration: none;
+      }
+      code {
+        background: #e7e8e2;
+        border-radius: 5px;
+      }
+      .remark-code-line-highlighted     { background-color: #373832; }
+      .pull-left {
+        float: left;
+        width: 47%;
+      }
+      .pull-right {
+        float: right;
+        width: 47%;
+      }
+      .pull-right ~ p {
+        clear: both;
+      }
+      #slideshow .slide .content code {
+        font-size: 1em;
+      }
+      #slideshow .slide .content pre code {
+        font-size: 1em;
+        padding: 15px;
+      }
+      .inverse {
+        background: #272822;
+        color: #777872;
+        text-shadow: 0 0 20px #333;
+      }
+      .inverse h1, .inverse h2 {
+        color: #f3f3f3;
+        line-height: 0.8em;
+      }
+
+      /* Slide-specific styling */
+      #slide-inverse .footnote {
+        bottom: 12px;
+        left: 20px;
+      }
+      #slide-how .slides {
+        font-size: 0.9em;
+        position: absolute;
+        top:  151px;
+        right: 140px;
+      }
+      #slide-how .slides h3 {
+        margin-top: 0.2em;
+      }
+      #slide-how .slides .first, #slide-how .slides .second {
+        padding: 1px 20px;
+        height: 90px;
+        width: 120px;
+        -moz-box-shadow: 0 0 10px #777;
+        -webkit-box-shadow: 0 0 10px #777;
+        box-shadow: 0 0 10px #777;
+      }
+      #slide-how .slides .first {
+        background: #fff;
+        position: absolute;
+        top: 20%;
+        left: 20%;
+        z-index: 1;
+      }
+      #slide-how .slides .second {
+        position: relative;
+        background: #fff;
+        z-index: 0;
+      }
+
+      /* Two-column layout */
+      .left-column {
+        color: #777;
+        width: 60%;
+        height: 92%;
+        float: left;
+      }
+        .left-column h2:last-of-type, .left-column h3:last-child {
+          color: #000;
+        }
+      .right-column {
+        width: 40%;
+        float: right;
+        padding-top: 1em;
+      }
+      .left-half {
+        width: 45%;
+        float: left;
+      }
+      .right-half {
+        width: 45%;
+        float: right;
+      }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle
+
+<h1> Julia `<:` Lessons <br/> Scala Could Learn</h1>
+
+A **student talk**<sup>1</sup> by Artem Pelenitsyn, Northeastern U. (Boston, USA)  
+artem@ccs.neu.edu
+
+_Scala Symposium'18, September&nbsp;28<sup>th</sup> 2018_
+
+
+<!-- [ccs.neu.edu/home/artem](http://www.ccs.neu.edu/home/artem/) -->
+
+<p style="text-align:left">
+<small>
+<span style="font-family: Ubuntu Mono;">———————</span><br>
+¹Based on a <a href="https://www.di.ens.fr/~zappa/projects/lambdajulia/">joint work </a> with 
+F. Zappa Nardelli, J. Belyakova, J. Bezanson, B. Chung, J. Vitek.
+</small>
+</p>
+
+---
+
+# Julia, following Wikipedia
+
+<center>
+<img height="200px" src="logo.png" />
+</center>
+
+* developed at MIT (2012) by people with math background, for math
+
+* dynamic, JIT-compiled (into LLVM)
+
+* class-based object model, w/o static typing discipline… but w/plenty of types
+
+---
+
+# Core Feature: Multiple Dispatch
+
+```julia
+*(x::Number, r::Range)  = range(x*first(r),...)
+*(x::Number, y::Number) = *(promote(x,y)...)
+*(x::T, y::T)
+        where T <: Union{Signed,Unsigned} = mul_int(x,y)
+    
+print( 3 * 4 )  // ← which * ???
+```
+
+<center>
+.large[⇒ _multiple dispatch_ resides on (surprisingly complicated) _subtype&nbsp;relation_]
+</center>
+
+---
+
+# Crash Course in Types of Julia (I)
+
+* User-defined classes, single inheritance
+
+    ```julia
+    abstract  type   Integer <: Real                 end
+
+    primitive type   Bool    <: Integer 8            end
+
+    mutable   struct Point   <: Any  x::Real y::Bool end
+    ```
+
+* Generics:
+
+    ```julia
+    struct Rational{T<:Integer} <: Real
+      num :: T
+      den :: T
+    end
+    ```
+
+---
+
+# Crash Course in Types of Julia (II)
+
+
+* Tuple types: `Tuple{Int, Bool, String}` ∋ `(1, true, "Scala")`
+
+* Union types: `Union{Int, Bool}` ∋ `1, 42, true`
+
+* Existentials (“UnionAll's”):
+
+.center[`Vector{T} where T <: Number` ∋ `[1.0, 2.0], [1, 2]`]
+
+* (Nearly) Full grammar of types:
+
+    ```
+τ   ::= Any 
+        |   Union{ τ1 , … , τn } 
+        |   Tuple{ τ1 , … , τn } 
+        |   name { τ1 , … , τn } 
+        |   τ where τ1 <: T <: τ2    
+        |   T                        (n ≥ 0)
+    ```
+
+---
+
+# Rules of Subtyping in Julia
+
+* Tuples — covariant, generics — invariant
+
+* Unions: ∀ / ∃-semantics
+
+    ```julia
+Int <: Union{String, Int}
+#       vs.
+Union{Unsigned, Signed} <: Integer
+    ```
+
+* UnionAll's — same as unions — ∀ / ∃:
+
+    ```julia
+Vector{Int} <: Vector{T} where T
+(Vector{T} where T <: Integer)  <: Vector{T} where T
+    ```
+
+---
+
+# “Special” Subtyping Rules
+
+* Distributivity of Tuples over Unions
+
+    ```julia
+Tuple{Union{A, B}, C} ≃ Union{Tuple{A, C}, Tuple{B, C}}
+    ```
+
+* The Diagonal Rule, idea:
+
+    _A generic function `f(p1::T, p2::T)`
+    can't be called like, e.g. `f(1, "Julia")`._
+
+    In general:
+    
+    _If T appears ≥ 1 covariantly and never invariantly,  
+    it **should** be instantiated with a concrete type._
+
+---
+
+# The Swamp (our lessons)
+
+1. “Disjunctive” Normal Form (NF) — doesn't work (interaction with variables)
+
+2. W/o NF, cannot statically mark variables for _diagonality_
+
+3. W/o NF, variables' scoping is handled in an ad-hoc manner (substructurally)
+
+# Slogan
+
+.large[<img width="50px" src="logo.png" /> is a unique mixture of a (mostly) .green[well-known features] which makes them interact in new, .red[unpredicted ways]]
+
+---
+
+# Julia & Scala: Feature&nbsp;Comparison
+
+<center>
+.large[
+| Julia | | Scala |
+|-------|-|------|
+| Invariant Generics  | | Generics  |
+| Covariant Tuples    | | Generics<sup>1</sup>  |
+| Existentials        | | Wildcards |
+| Unions              | | Unions<sup>2</sup>    |
+| Distributivity      | | —         |
+| Diagonal Rule       | | —         |
+]
+</center>
+
+<p style="text-align:left">
+<small>
+<span style="font-family: Ubuntu Mono;">———————</span><br>
+¹Via variance annotations<br>
+²Via Dotty or <a href="https://stackoverflow.com/a/6312508/465100">clever trick</a> by Miles Sabin
+</small>
+</p>
+
+    </textarea>
+    <script src="remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create({
+        //sourceUrl: 'slides.md',
+        ratio: '16:9',
+        countIncrementalSlides: false
+      });
+      function hidePrintSlides(slideshow) {
+          const allSlides = slideshow.getSlides();
+          let lastSlide;
+          let currentSlide;
+          const slidesToHide = [];
+          const slidesEl = document.getElementsByClassName("remark-slides-area")[0];
+          const slideEls = slidesEl.children;
+          for (let i = 0; i < allSlides.length; i++) {
+            lastSlide = currentSlide;
+            currentSlide = allSlides[i];
+            if (lastSlide && (
+              String(lastSlide.properties.continued) === "true"
+              ||
+              String(currentSlide.properties.count) === "false"
+            )) {
+              const slideToHideIndex = i - 1;
+              slidesToHide.push(slideToHideIndex);
+              slideEls[slideToHideIndex].className = slideEls[slideToHideIndex].className + ' has-continuation';
+            }
+          }
+        }
+        //hidePrintSlides(slideshow)
+    </script>
+  </body>
+</html>
